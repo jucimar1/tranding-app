@@ -1,7 +1,7 @@
 {
   "name": "timing-pro-ultra",
   "version": "2.0.0",
-  "description": "Trading Dashboard - Real-time with WebSocket",
+  "description": "Trading Dashboard Real-Time",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "ws": "^8.14.2",
-    "node-fetch": "^2.7.0",
+    "ws": "^8.16.0",
     "dotenv": "^16.3.1",
     "cors": "^2.8.5"
   },
