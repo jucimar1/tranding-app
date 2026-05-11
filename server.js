@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const fetch = require('node-fetch');
 const path = require('path');
 const cors = require('cors');
 require('dotenv').config();
@@ -26,41 +25,24 @@ let currentSymbol = 'btcusdt';
 
 // API Telegram
 app.post('/api/telegram', async (req, res) => {
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return res.status(500).json({ error: 'Telegram não configurado' });
     try {
-        const { message } = req.body;
-        if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
-            return res.status(500).json({ error: 'Telegram não configurado' });
-        }
-        const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-        const response = await fetch(url, {
+        const resTg = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: TELEGRAM_CHAT_ID,
-                text: message,
-                parse_mode: 'HTML'
-            })
+            body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: req.body.message, parse_mode: 'HTML' })
         });
-        const data = await response.json();
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+        res.json(await resTg.json());
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Health Check
 app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        clients: clients.size,
-        symbol: currentSymbol.toUpperCase(),
-        wsConnected: binanceWS && binanceWS.readyState === 1
-    });
+    res.json({ status: 'ok', clients: clients.size, symbol: currentSymbol.toUpperCase() });
 });
 
-// Dados Iniciais
-app.get('/api/init', async (req, res) => {
+// DADOS IMEDIATOS VIA REST (Fallback garantido)
+app.get('/api/data', async (req, res) => {
     try {
         const symbol = (req.query.symbol || 'BTCUSDT').toUpperCase();
         const [tickerRes, klinesRes] = await Promise.all([
@@ -69,128 +51,83 @@ app.get('/api/init', async (req, res) => {
         ]);
         const ticker = await tickerRes.json();
         const klines = await klinesRes.json();
-        res.json({
-            price: parseFloat(ticker.c),
-            change: parseFloat(ticker.P),
-            symbol: ticker.s,
-            klines: klines
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+        res.json({ price: parseFloat(ticker.c), change: parseFloat(ticker.P), symbol: ticker.s, klines });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Serve index.html
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // WebSocket Binance
-function connectBinanceWebSocket(symbol) {
+function connectBinanceWS(symbol) {
     if (binanceWS) binanceWS.close();
-    const wsUrl = `wss://stream.binance.com:9443/ws/${symbol}@ticker/${symbol}@kline_15m`;
-    console.log(`🔌 Conectando: ${wsUrl}`);
+    const url = `wss://stream.binance.com:9443/ws/${symbol}@ticker/${symbol}@kline_15m`;
+    console.log(`🔌 Tentando Binance WS: ${url}`);
     
-    binanceWS = new WebSocket(wsUrl);
+    binanceWS = new WebSocket(url);
+    let reconnectTimer;
 
-    binanceWS.on('open', () => {
-        console.log(`✅ Binance WS conectado - ${symbol.toUpperCase()}`);
-    });
-
-    binanceWS.on('message', (data) => {
+    binanceWS.on('open', () => console.log(`✅ Binance WS conectado - ${symbol}`));
+    
+    binanceWS.on('message', (raw) => {
         try {
-            const message = JSON.parse(data);
-            
-            // Preço em tempo real
-            if (message.e === '24hrTicker') {
-                currentPriceData = {
-                    symbol: message.s,
-                    price: parseFloat(message.c),
-                    change: parseFloat(message.P),
-                    time: message.E
-                };
-                broadcast({ type: 'price', data: currentPriceData });
+            const msg = JSON.parse(raw);
+            if (msg.e === '24hrTicker') {
+                currentPriceData = { symbol: msg.s, price: parseFloat(msg.c), change: parseFloat(msg.P) };
+                broadcast({ type: 'price',  currentPriceData });
             }
-            
-            // Candle em tempo real
-            if (message.e === 'kline') {
-                const k = message.k;
+            if (msg.e === 'kline') {
+                const k = msg.k;
                 const candle = [k.t, k.o, k.h, k.l, k.c, k.v, k.T, k.q];
-                
-                if (currentKlines.length > 0 && currentKlines[currentKlines.length - 1][0] === k.t) {
-                    currentKlines[currentKlines.length - 1] = candle;
-                } else {
-                    currentKlines.push(candle);
-                    if (currentKlines.length > 100) currentKlines.shift();
-                }
-                broadcast({ type: 'kline', data: candle });
+                if (currentKlines.length && currentKlines[currentKlines.length-1][0] === k.t) currentKlines[currentKlines.length-1] = candle;
+                else { currentKlines.push(candle); if (currentKlines.length > 100) currentKlines.shift(); }
+                broadcast({ type: 'kline',  candle });
             }
-        } catch (e) {
-            console.error('Erro WS:', e);
-        }
+        } catch (e) { console.error('WS Parse Error:', e); }
     });
 
-    binanceWS.on('close', () => {
-        console.log('❌ WS desconectado. Reconectando em 5s...');
-        setTimeout(() => connectBinanceWebSocket(currentSymbol), 5000);
+    binanceWS.on('close', (code, reason) => {
+        console.log(`❌ Binance WS fechado (${code}): ${reason}`);
+        reconnectTimer = setTimeout(() => connectBinanceWS(currentSymbol), 5000);
     });
 
     binanceWS.on('error', (err) => {
-        console.error('Erro Binance WS:', err);
+        console.error('❌ Binance WS Erro:', err.message);
+        clearTimeout(reconnectTimer);
+        setTimeout(() => connectBinanceWS(currentSymbol), 5000);
     });
 }
 
-// Broadcast para clientes
-function broadcast(message) {
-    const data = JSON.stringify(message);
-    clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(data);
-        }
-    });
+function broadcast(msg) {
+    const data = JSON.stringify(msg);
+    clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(data); });
 }
 
-// Conexão de clientes
 wss.on('connection', (ws) => {
-    console.log('👤 Cliente conectado. Total:', clients.size + 1);
     clients.add(ws);
+    console.log(`👤 Cliente conectado. Total: ${clients.size}`);
+    if (currentPriceData) ws.send(JSON.stringify({ type: 'price',  currentPriceData }));
+    if (currentKlines.length) ws.send(JSON.stringify({ type: 'klines',  currentKlines }));
     
-    // Envia dados atuais
-    if (currentPriceData) ws.send(JSON.stringify({ type: 'price', data: currentPriceData }));
-    if (currentKlines.length > 0) ws.send(JSON.stringify({ type: 'klines', data: currentKlines }));
-    
-    ws.on('message', (message) => {
+    ws.on('message', (raw) => {
         try {
-            const data = JSON.parse(message);
+            const data = JSON.parse(raw);
             if (data.type === 'subscribe') {
-                const newSymbol = data.symbol.toLowerCase();
-                if (newSymbol !== currentSymbol) {
-                    console.log(`🔄 Trocando para: ${newSymbol}`);
-                    currentSymbol = newSymbol;
-                    currentKlines = [];
-                    connectBinanceWebSocket(currentSymbol);
+                const sym = data.symbol.toLowerCase();
+                if (sym !== currentSymbol) {
+                    currentSymbol = sym; currentKlines = [];
+                    connectBinanceWS(currentSymbol);
                 }
             }
-        } catch (e) {
-            console.error('Erro mensagem cliente:', e);
-        }
+        } catch(e) {}
     });
 
-    ws.on('close', () => {
-        console.log('🔌 Cliente desconectado. Total:', clients.size - 1);
-        clients.delete(ws);
-    });
+    ws.on('close', () => { clients.delete(ws); console.log(`🔌 Cliente saiu. Total: ${clients.size}`); });
 });
 
-// Iniciar servidor
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`📊 Dashboard: http://localhost:${PORT}`);
-    console.log(`💚 Health: http://localhost:${PORT}/api/health`);
-    
-    // Conecta WebSocket
-    connectBinanceWebSocket(currentSymbol);
+    console.log(`🚀 Servidor ativo na porta ${PORT}`);
+    connectBinanceWS(currentSymbol);
 });
 
-process.on('uncaughtException', err => console.error('Erro:', err));
+process.on('uncaughtException', e => console.error('Fatal:', e));
