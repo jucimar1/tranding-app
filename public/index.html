@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🎯 Timing Pro ULTRA — Real-Time Trading</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+    <!-- HEADER -->
+    <div class="card">
+        <div class="header">
+            <div>
+                <span class="dot offline" id="statusDot"></span>
+                <span id="connStatus" style="font-weight:600">CONECTANDO...</span>
+            </div>
+            <div class="badge" id="displaySym">BTCUSDT</div>
+        </div>
+        
+        <div class="grid">
+            <div class="metric">
+                <div class="m-label">💰 Preço Atual</div>
+                <div class="m-value" id="curPrice">--.--</div>
+                <div class="m-sub" id="priceChange">--.--%</div>
+            </div>
+            <div class="metric">
+                <div class="m-label">📊 Volatilidade (ATR%)</div>
+                <div class="m-value" id="valAtrPct">--.--%<span class="cond c-neutral" id="volBadge">?</span></div>
+                <div class="m-sub">Ideal: 0.5% – 3.0%</div>
+            </div>
+        </div>
+
+        <div class="macd-wrap">
+            <div class="m-label">📈 MACD Histograma <span id="macdStatus" class="cond c-neutral">AGUARDANDO</span></div>
+            <div class="macd-bar"><div class="macd-zero"></div><div class="macd-fill" id="macdFill"></div></div>
+            <div class="macd-labels"><span>🔻 Venda</span><span>⚪ Neutro</span><span>🟢 Compra</span></div>
+        </div>
+
+        <div style="margin-top:12px;">
+            <input type="text" id="inputSym" value="BTCUSDT" placeholder="Ex: BTCUSDT, ETHUSDT, SOLUSDT" autocomplete="off">
+        </div>
+        
+        <button class="btn-prime" onclick="Engine.restart()">🔄 REINICIAR ENGINE</button>
+        <button class="btn-bot" id="botToggle" onclick="Engine.toggleBot()">🤖 BOT AUTOMÁTICO: OFF</button>
+        
+        <div class="config-panel">
+            <div class="cfg-row"><span class="cfg-l">Risco/Op:</span><span class="cfg-v" id="cfgRisk">R$ 100.00</span></div>
+            <div class="cfg-row"><span class="cfg-l">Stop:</span><span class="cfg-v">1.5× ATR</span></div>
+            <div class="cfg-row"><span class="cfg-l">Alvo:</span><span class="cfg-v">2.5× ATR</span></div>
+            <div class="cfg-row"><span class="cfg-l">Trailing:</span><span class="cfg-v">Ativa em +1× ATR</span></div>
+        </div>
+        
+        <div class="fs-btn" onclick="Engine.fullscreen()">⛶ Tela Cheia (TV/Tablet)</div>
+    </div>
+
+    <!-- SINAL -->
+    <div class="card">
+        <div class="m-label" style="color:var(--pri); font-weight:700">🎯 Timing de Entrada — MACD + Volatilidade + Tendência</div>
+        <div id="signalDisplay" class="signal-box wait">🔍 AGUARDANDO CONFIRMAÇÃO...</div>
+        
+        <div class="grid" style="margin-top:12px;">
+            <div class="metric">
+                <div class="m-label">📐 RSI (14)</div>
+                <div id="valRsi" class="m-value">--.--</div>
+                <div class="m-sub" id="rsiStatus">Neutro</div>
+            </div>
+            <div class="metric">
+                <div class="m-label">📈 EMA21</div>
+                <div id="valEma21" class="m-value">$--.--</div>
+                <div class="m-sub" id="trendStatus">Aguardando...</div>
+            </div>
+        </div>
+        
+        <div class="rules">
+            <strong>✅ Regras de Entrada:</strong><br>
+            • MACD cruza zero com direção definida<br>
+            • Volatilidade entre 0.5% e 3.0%<br>
+            • Preço alinhado com EMA21<br>
+            • RSI fora de zonas extremas (<25 ou >75)
+        </div>
+    </div>
+
+    <!-- SAÍDAS -->
+    <div class="card" style="border-left:4px solid var(--pri);">
+        <div class="m-label" style="color:var(--pri); font-weight:700">🚪 Saída Inteligente — Proteção de Lucro</div>
+        <div class="exit-grid">
+            <div class="exit-item">
+                <div class="m-label">🛑 Stop Loss</div>
+                <div class="exit-val sl" id="calcStop">--.--</div>
+                <div class="exit-sub">1.5× ATR</div>
+            </div>
+            <div class="exit-item">
+                <div class="m-label">🔄 Trailing</div>
+                <div class="exit-val ts" id="calcTrail">--.--</div>
+                <div class="exit-sub">Após +1× ATR</div>
+            </div>
+            <div class="exit-item">
+                <div class="m-label">✅ Take Profit</div>
+                <div class="exit-val tp" id="calcTp">--.--</div>
+                <div class="exit-sub">2.5× ATR</div>
+            </div>
+        </div>
+        
+        <div style="margin-top:12px; padding:10px; background:rgba(240,185,11,0.1); border-radius:8px; border:1px solid var(--pri); text-align:center;">
+            <div class="m-label" style="color:var(--pri);">📊 Lote Sugerido (Risco Fixo)</div>
+            <div style="font-size:18px; font-weight:800; color:var(--pri); margin-top:4px;" id="calcLot">--.---- un</div>
+        </div>
+        
+        <div id="pnlBox" class="pnl-box">
+            <div style="font-size:10px; color:var(--mut);">P&L ATUAL</div>
+            <div id="pnlVal" style="font-size:17px;">--.--%</div>
+        </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="card">
+        <div class="m-label">📋 Log em Tempo Real</div>
+        <div id="log">🔌 Inicializando sistema...</div>
+    </div>
+    
+    <div style="text-align:center; color:var(--mut); font-size:10px; margin-top:10px;">
+        🎯 Timing Pro ULTRA v2.0 • Dados: Binance WebSocket • Atualização: Real-Time
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
