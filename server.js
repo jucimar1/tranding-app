@@ -13,43 +13,34 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Configurações de Segurança e Performance
+// Configurações
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(cors());
 app.use(compression());
-app.use(express.json()); // Importante para o Telegram funcionar
+app.use(express.json());
 
-// Rate Limiting
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use('/api/', limiter);
 
-// Serve arquivos estáticos
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Variáveis de Ambiente
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// Estado Global
 const clients = new Set();
 let currentPriceData = null;
 let currentKlines = [];
 let binanceWS = null;
 let currentSymbol = 'btcusdt';
 
-// --- TELEGRAM ROUTES ---
-
-// Rota para enviar alertas
+// API Telegram
 app.post('/api/telegram', async (req, res) => {
   try {
     const { message } = req.body;
-    
     if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
       return res.status(500).json({ error: 'Telegram não configurado' });
     }
-    
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-    
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -59,7 +50,6 @@ app.post('/api/telegram', async (req, res) => {
         parse_mode: 'HTML'
       })
     });
-    
     const data = await response.json();
     if (data.ok) res.json({ success: true });
     else res.status(500).json({ error: data.description });
@@ -68,34 +58,25 @@ app.post('/api/telegram', async (req, res) => {
   }
 });
 
-// Rota de teste
 app.get('/api/test-telegram', async (req, res) => {
   try {
     if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
-      return res.status(500).json({ error: 'Variáveis de ambiente não configuradas' });
+      return res.status(500).json({ error: 'Variáveis não configuradas' });
     }
-    
-    const testMessage = `
-🧪 <b>TESTE - TIMING PRO</b>
-✅ Conexão com Telegram funcionando!
- ${new Date().toLocaleString('pt-BR')}
-    `;
-    
+    const testMessage = `🧪 <b>TESTE - TIMING PRO</b>\n✅ Telegram funcionando!\n${new Date().toLocaleString('pt-BR')}`;
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: testMessage, parse_mode: 'HTML' })
     });
-    
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// --- API ROUTES ---
-
+// API Health
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -107,16 +88,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// API Init - Dados iniciais
 app.get('/api/init', async (req, res) => {
   try {
     const symbol = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    console.log(`📥 Fetching init data for ${symbol}`);
     const [tickerRes, klinesRes] = await Promise.all([
       fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`),
       fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=15m&limit=100`)
     ]);
-    if (!tickerRes.ok || !klinesRes.ok) throw new Error('Erro Binance');
+    if (!tickerRes.ok || !klinesRes.ok) throw new Error('Binance API error');
     const ticker = await tickerRes.json();
     const klines = await klinesRes.json();
+    console.log(`✅ Init  price=${ticker.c}, klines=${klines.length}`);
     res.json({
       price: parseFloat(ticker.c),
       change: parseFloat(ticker.P),
@@ -124,34 +108,36 @@ app.get('/api/init', async (req, res) => {
       klines: klines
     });
   } catch (error) {
+    console.error('❌ Init error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // Serve PWA files
-app.get('/manifest.json', (req, res) => res.sendFile(path.join(__dirname, 'public', 'manifest.json')));
+app.get('/manifest.json', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+});
+
 app.get('/sw.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sw.js'), {
     headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' }
   });
 });
 
-// Fallback para Frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// --- WEBSOCKET LOGIC ---
-
+// WebSocket Binance
 function connectBinanceWebSocket(symbol) {
   if (binanceWS) binanceWS.close();
   const wsUrl = `wss://stream.binance.com:9443/ws/${symbol}@ticker/${symbol}@kline_15m`;
-  console.log(`🔌 Conectando ao Binance WS: ${wsUrl}`);
+  console.log(`🔌 Connecting to Binance WS: ${wsUrl}`);
   
   binanceWS = new WebSocket(wsUrl);
 
   binanceWS.on('open', () => {
-    console.log(`✅ Binance WS conectado para ${symbol.toUpperCase()}`);
+    console.log(`✅ Binance WS connected for ${symbol.toUpperCase()}`);
   });
 
   binanceWS.on('message', (data) => {
@@ -175,27 +161,35 @@ function connectBinanceWebSocket(symbol) {
           currentKlines.push(candle);
           if (currentKlines.length > 100) currentKlines.shift();
         }
-        broadcast({ type: 'kline', data: candle });
+        broadcast({ type: 'kline',  candle });
       }
-    } catch (e) { console.error('WS Error', e); }
+    } catch (e) { console.error('WS message error:', e); }
   });
 
   binanceWS.on('close', () => {
-    console.log('❌ Binance WS desconectado. Reconectando...');
+    console.log('❌ Binance WS disconnected. Reconnecting in 5s...');
     setTimeout(() => connectBinanceWebSocket(currentSymbol), 5000);
+  });
+
+  binanceWS.on('error', (error) => {
+    console.error('Binance WS error:', error);
   });
 }
 
 function broadcast(message) {
   const data = JSON.stringify(message);
   clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) client.send(data);
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(data);
+    }
   });
 }
 
 wss.on('connection', (ws) => {
+  console.log('👤 Client connected. Total:', clients.size + 1);
   clients.add(ws);
-  if (currentPriceData) ws.send(JSON.stringify({ type: 'price', data: currentPriceData }));
+  
+  if (currentPriceData) ws.send(JSON.stringify({ type: 'price',  currentPriceData }));
   if (currentKlines.length > 0) ws.send(JSON.stringify({ type: 'klines', data: currentKlines }));
   
   ws.on('message', (message) => {
@@ -204,20 +198,29 @@ wss.on('connection', (ws) => {
       if (data.type === 'subscribe') {
         const newSymbol = data.symbol.toLowerCase();
         if (newSymbol !== currentSymbol) {
+          console.log(`🔄 Switching to ${newSymbol}`);
           currentSymbol = newSymbol;
           currentKlines = [];
           connectBinanceWebSocket(currentSymbol);
         }
       }
-    } catch (e) {}
+    } catch (e) { console.error('Client message error:', e); }
   });
 
-  ws.on('close', () => clients.delete(ws));
+  ws.on('close', () => {
+    console.log('🔌 Client disconnected. Total:', clients.size - 1);
+    clients.delete(ws);
+  });
 });
 
-// Start
+// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(` Server rodando na porta ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}`);
+  console.log(`💚 Health: http://localhost:${PORT}/api/health`);
   connectBinanceWebSocket(currentSymbol);
 });
+
+process.on('uncaughtException', error => console.error('Uncaught Exception:', error));
+process.on('unhandledRejection', (reason, promise) => console.error('Unhandled Rejection:', reason));
