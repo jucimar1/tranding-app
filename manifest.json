@@ -1,12 +1,15 @@
 {
-  "name": "Timing Pro ULTRA",
+  "name": "Timing Pro ULTRA - Trading Dashboard",
   "short_name": "TimingPro",
-  "description": "Trading Dashboard - Real-time analysis",
+  "description": "Análise técnica em tempo real para trading de criptomoedas",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#f0b90b",
   "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "pt-BR",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -19,6 +22,23 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Bitcoin",
+      "short_name": "BTC",
+      "description": "Ver Bitcoin/USDT",
+      "url": "/?symbol=BTCUSDT",
+      "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Ethereum",
+      "short_name": "ETH",
+      "description": "Ver Ethereum/USDT",
+      "url": "/?symbol=ETHUSDT",
+      "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192"}]
     }
   ]
 }
