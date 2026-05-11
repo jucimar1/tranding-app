@@ -1,7 +1,7 @@
 {
   "name": "Timing Pro ULTRA - Trading Dashboard",
   "short_name": "TimingPro",
-  "description": "Análise técnica em tempo real para trading de criptomoedas",
+  "description": "Análise técnica em tempo real para trading",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",
@@ -40,5 +40,6 @@
       "url": "/?symbol=ETHUSDT",
       "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192"}]
     }
-  ]
+  ],
+  "screenshots": []
 }
