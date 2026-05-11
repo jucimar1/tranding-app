@@ -2,445 +2,287 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#f0b90b">
-    <title>🎯 Timing Pro ULTRA</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 Timing Pro ULTRA - Real-Time</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0a0a0f; --bg-secondary: #12121a; --bg-tertiary: #1a1a2e;
-            --bg-card: rgba(26, 26, 46, 0.6); --bg-card-hover: rgba(26, 26, 46, 0.8);
-            --gold: #f0b90b; --gold-light: #fcd535; --gold-dark: #c9960a;
-            --green: #00d4aa; --green-light: #00ffcc; --green-dark: #00a888;
-            --red: #ff4757; --red-light: #ff6b7a; --red-dark: #cc3344;
-            --text-primary: #ffffff; --text-secondary: #a0a0b8; --text-muted: #6b6b80; --text-dim: #4a4a5e;
-            --border-subtle: rgba(255, 255, 255, 0.06); --border-medium: rgba(255, 255, 255, 0.1);
-            --shadow-gold: 0 0 30px rgba(240, 185, 11, 0.15);
-            --shadow-green: 0 0 30px rgba(0, 212, 170, 0.15);
-            --shadow-red: 0 0 30px rgba(255, 71, 87, 0.15);
-            --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px;
-            --gap: 16px;
+            --bg: #0a0a0f; --card: rgba(26,26,46,0.6); --gold: #f0b90b;
+            --green: #00d4aa; --red: #ff4757; --text: #fff; --muted: #6b6b80;
+            --border: rgba(255,255,255,0.06); --radius: 16px;
         }
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary);
-            min-height: 100vh; overflow-x: hidden;
+            font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text);
+            min-height: 100vh; padding: 20px;
         }
-        body::before {
-            content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: radial-gradient(ellipse at 20% 0%, rgba(240, 185, 11, 0.03) 0%, transparent 50%),
-                        radial-gradient(ellipse at 80% 100%, rgba(0, 212, 170, 0.03) 0%, transparent 50%);
-            pointer-events: none; z-index: 0;
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 24px; background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
         }
-        .app-container { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .top-bar {
-            display: flex; align-items: center; justify-content: space-between; padding: 16px 24px;
-            background: var(--bg-card); backdrop-filter: blur(20px); border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg); margin-bottom: var(--gap); flex-wrap: wrap; gap: 12px;
-        }
-        .logo { display: flex; align-items: center; gap: 10px; }
-        .logo-icon {
-            width: 36px; height: 36px; background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-            border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
-            font-size: 18px; box-shadow: var(--shadow-gold);
-        }
-        .logo-text { font-size: 18px; font-weight: 800; }
-        .logo-text span { color: var(--gold); }
-        .logo-badge {
-            font-size: 9px; font-weight: 700; background: rgba(240, 185, 11, 0.15); color: var(--gold);
-            padding: 2px 8px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase;
-        }
-        .connection-status {
+        .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; }
+        .logo span { color: var(--gold); }
+        .status {
             display: flex; align-items: center; gap: 8px; padding: 6px 14px;
-            background: rgba(0, 212, 170, 0.08); border: 1px solid rgba(0, 212, 170, 0.2);
+            background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.2);
             border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--green);
         }
-        .connection-status.disconnected {
-            background: rgba(255, 71, 87, 0.08); border-color: rgba(255, 71, 87, 0.2); color: var(--red);
+        .status.offline { background: rgba(255,71,87,0.08); border-color: rgba(255,71,87,0.2); color: var(--red); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        .input-group { display: flex; gap: 8px; align-items: center; }
+        input {
+            background: rgba(26,26,46,0.8); border: 1px solid var(--border);
+            color: #fff; padding: 6px 12px; border-radius: 8px; font-family: monospace;
+            text-transform: uppercase; outline: none;
         }
-        .status-dot {
-            width: 8px; height: 8px; border-radius: 50%; background: var(--green);
-            box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite;
+        input:focus { border-color: var(--gold); }
+        button {
+            padding: 8px 16px; background: linear-gradient(135deg, var(--gold), #c9960a);
+            color: #000; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;
         }
-        .connection-status.disconnected .status-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .sym-selector {
-            display: flex; align-items: center; gap: 8px; background: var(--bg-tertiary);
-            border: 1px solid var(--border-medium); border-radius: var(--radius-sm); padding: 6px 12px;
-        }
-        .sym-selector label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
-        .sym-selector input {
-            background: none; border: none; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;
-            font-size: 13px; font-weight: 600; width: 100px; outline: none; text-transform: uppercase;
-        }
-        .btn-restart {
-            padding: 8px 16px; background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-            color: #000; border: none; border-radius: var(--radius-sm); font-weight: 700; font-size: 12px;
-            cursor: pointer; transition: 0.15s; display: flex; align-items: center; gap: 6px;
-        }
-        .btn-restart:hover { transform: translateY(-1px); box-shadow: var(--shadow-gold); }
-        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+        button:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(240,185,11,0.3); }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .card {
-            background: var(--bg-card); backdrop-filter: blur(20px); border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-lg); padding: 20px; transition: 0.3s; position: relative; overflow: hidden;
-            animation: fadeIn 0.5s ease-out;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 20px; animation: fadeIn 0.5s;
         }
-        .card:hover { border-color: var(--border-medium); background: var(--bg-card-hover); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-        .card-title {
-            font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
-            color: var(--text-secondary); display: flex; align-items: center; gap: 8px;
+        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        .card-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+        .price { font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 800; }
+        .price.up { color: var(--green); }
+        .price.down { color: var(--red); }
+        .change {
+            font-family: monospace; font-size: 16px; font-weight: 600;
+            padding: 4px 10px; border-radius: 8px; display: inline-block; margin-left: 12px;
         }
-        .price-display { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
-        .price-value {
-            font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 800;
-            letter-spacing: -1px; color: var(--text-primary);
+        .change.up { background: rgba(0,212,170,0.12); color: var(--green); }
+        .change.down { background: rgba(255,71,87,0.12); color: var(--red); }
+        .signal {
+            grid-column: 1 / -1; text-align: center; padding: 28px; border-width: 2px;
         }
-        .price-value.up { color: var(--green); }
-        .price-value.down { color: var(--red); }
-        .price-change {
-            font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 600;
-            padding: 4px 10px; border-radius: var(--radius-sm);
-        }
-        .price-change.up { background: rgba(0, 212, 170, 0.12); color: var(--green); }
-        .price-change.down { background: rgba(255, 71, 87, 0.12); color: var(--red); }
-        .price-sub { font-size: 12px; color: var(--text-muted); }
-        .vol-meter { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-        .vol-value { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 800; }
-        .vol-badge {
-            padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 0.5px;
-        }
-        .vol-badge.ideal { background: rgba(0, 212, 170, 0.12); color: var(--green); border: 1px solid rgba(0, 212, 170, 0.3); }
-        .vol-badge.low { background: rgba(255, 71, 87, 0.12); color: var(--red); border: 1px solid rgba(255, 71, 87, 0.3); }
-        .vol-bar-bg { height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
-        .vol-bar-fill { height: 100%; border-radius: 3px; transition: 0.5s; }
-        .vol-bar-fill.ideal { background: linear-gradient(90deg, var(--green), var(--green-light)); }
-        .vol-bar-fill.low { background: linear-gradient(90deg, var(--red-dark), var(--red)); }
-        .vol-range { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
-        .signal-card {
-            grid-column: 1 / -1; text-align: center; padding: 28px; border-width: 2px; transition: 0.5s;
-        }
-        .signal-card.buy-signal { border-color: rgba(0, 212, 170, 0.4); box-shadow: var(--shadow-green); }
-        .signal-card.sell-signal { border-color: rgba(255, 71, 87, 0.4); box-shadow: var(--shadow-red); }
-        .signal-card.wait-signal { border-color: rgba(240, 185, 11, 0.3); box-shadow: var(--shadow-gold); }
-        .signal-icon { font-size: 40px; margin-bottom: 8px; display: block; }
+        .signal.buy { border-color: rgba(0,212,170,0.4); box-shadow: 0 0 30px rgba(0,212,170,0.15); }
+        .signal.sell { border-color: rgba(255,71,87,0.4); box-shadow: 0 0 30px rgba(255,71,87,0.15); }
+        .signal.wait { border-color: rgba(240,185,11,0.3); box-shadow: 0 0 30px rgba(240,185,11,0.15); }
+        .signal-icon { font-size: 40px; margin-bottom: 8px; }
         .signal-text { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
-        .signal-text.buy-text { color: var(--green); }
-        .signal-text.sell-text { color: var(--red); }
-        .signal-text.wait-text { color: var(--gold); }
-        .signal-sub { font-size: 13px; color: var(--text-muted); }
-        .signal-reasons { display: flex; justify-content: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-        .reason-tag {
-            padding: 4px 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle);
-            border-radius: 20px; font-size: 11px; font-weight: 600; color: var(--text-secondary);
-        }
-        @keyframes signal-glow {
-            0% { box-shadow: 0 0 0 0 rgba(240, 185, 11, 0.3); }
-            70% { box-shadow: 0 0 0 15px rgba(240, 185, 11, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(240, 185, 11, 0); }
-        }
-        .signal-new { animation: signal-glow 1.5s ease-out; }
-        .indicators-card { grid-column: 1 / -1; }
+        .signal.buy .signal-text { color: var(--green); }
+        .signal.sell .signal-text { color: var(--red); }
+        .signal.wait .signal-text { color: var(--gold); }
+        .indicators { grid-column: 1 / -1; }
         .indicators-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-        .indicator-item {
-            background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
-            padding: 14px; text-align: center; transition: 0.15s;
+        .indicator {
+            background: rgba(26,26,46,0.8); border: 1px solid var(--border);
+            border-radius: 12px; padding: 14px; text-align: center;
         }
-        .indicator-item:hover { border-color: var(--border-medium); transform: translateY(-2px); }
-        .indicator-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 6px; }
-        .indicator-value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; }
-        .indicator-status {
-            font-size: 10px; font-weight: 600; margin-top: 4px; padding: 2px 8px;
-            border-radius: 10px; display: inline-block;
+        .indicator-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+        .indicator-value { font-family: monospace; font-size: 20px; font-weight: 700; }
+        .status-badge {
+            font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; display: inline-block;
         }
-        .indicator-status.bullish { background: rgba(0, 212, 170, 0.1); color: var(--green); }
-        .indicator-status.bearish { background: rgba(255, 71, 87, 0.1); color: var(--red); }
-        .indicator-status.neutral { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
-        .macd-section { margin-top: 16px; }
-        .macd-bar-container {
-            height: 40px; background: var(--bg-tertiary); border-radius: var(--radius-sm);
-            position: relative; overflow: hidden; margin-bottom: 8px;
+        .status-badge.bullish { background: rgba(0,212,170,0.1); color: var(--green); }
+        .status-badge.bearish { background: rgba(255,71,87,0.1); color: var(--red); }
+        .status-badge.neutral { background: rgba(255,255,255,0.05); color: var(--muted); }
+        .macd-bar {
+            height: 40px; background: rgba(26,26,46,0.8); border-radius: 8px;
+            position: relative; overflow: hidden; margin-top: 16px;
         }
-        .macd-center-line {
+        .macd-line {
             position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
-            background: rgba(255, 255, 255, 0.15); transform: translateX(-50%);
+            background: rgba(255,255,255,0.15); transform: translateX(-50%);
         }
-        .macd-fill { height: 100%; border-radius: var(--radius-sm); transition: 0.5s; position: absolute; top: 0; }
-        .macd-fill.positive { background: linear-gradient(90deg, var(--green-dark), var(--green), var(--green-light)); right: 50%; }
-        .macd-fill.negative { background: linear-gradient(90deg, var(--red-light), var(--red), var(--red-dark)); left: 50%; }
-        .macd-labels { display: flex; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--text-muted); }
-        .exit-card { grid-column: 1 / -1; }
+        .macd-fill { height: 100%; transition: 0.5s; position: absolute; }
+        .macd-fill.pos { background: linear-gradient(90deg, #00a888, var(--green)); right: 50%; }
+        .macd-fill.neg { background: linear-gradient(90deg, var(--red), #cc3344); left: 50%; }
         .exit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
         .exit-item {
-            background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
-            padding: 16px; text-align: center; transition: 0.15s;
+            background: rgba(26,26,46,0.8); border: 1px solid var(--border);
+            border-radius: 12px; padding: 16px; text-align: center;
         }
-        .exit-item:hover { transform: translateY(-2px); border-color: var(--border-medium); }
         .exit-item.stop { border-top: 2px solid var(--red); }
-        .exit-item.trailing { border-top: 2px solid var(--gold); }
         .exit-item.tp { border-top: 2px solid var(--green); }
-        .exit-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 6px; }
-        .exit-value { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; }
-        .exit-value.stop-val { color: var(--red); }
-        .exit-value.trailing-val { color: var(--gold); }
-        .exit-value.tp-val { color: var(--green); }
-        .exit-mult { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
-        .lot-section {
-            background: linear-gradient(135deg, rgba(240, 185, 11, 0.08), rgba(240, 185, 11, 0.02));
-            border: 1px solid rgba(240, 185, 11, 0.2); border-radius: var(--radius-md); padding: 14px; text-align: center;
+        .exit-item.trailing { border-top: 2px solid var(--gold); }
+        .exit-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+        .exit-value { font-family: monospace; font-size: 18px; font-weight: 700; }
+        .exit-value.stop { color: var(--red); }
+        .exit-value.tp { color: var(--green); }
+        .exit-value.trailing { color: var(--gold); }
+        .lot-box {
+            background: linear-gradient(135deg, rgba(240,185,11,0.08), rgba(240,185,11,0.02));
+            border: 1px solid rgba(240,185,11,0.2); border-radius: 12px; padding: 14px; text-align: center;
         }
-        .lot-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); margin-bottom: 4px; }
-        .lot-value { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 800; color: var(--gold); }
-        .pnl-box { margin-top: 12px; padding: 12px; border-radius: var(--radius-md); text-align: center; display: none; border: 1px solid; }
-        .pnl-box.positive { background: rgba(0, 212, 170, 0.08); border-color: rgba(0, 212, 170, 0.2); }
-        .pnl-box.negative { background: rgba(255, 71, 87, 0.08); border-color: rgba(255, 71, 87, 0.2); }
-        .pnl-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
-        .pnl-value { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 800; }
-        .pnl-value.positive { color: var(--green); }
-        .pnl-value.negative { color: var(--red); }
-        .controls-card { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-        .config-grid { display: flex; gap: 16px; flex-wrap: wrap; }
-        .config-item { display: flex; flex-direction: column; gap: 2px; }
-        .config-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); }
-        .config-value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--gold); }
-        .btn-bot-toggle {
-            padding: 10px 24px; border: 2px solid var(--border-medium); background: var(--bg-tertiary);
-            color: var(--text-secondary); border-radius: var(--radius-sm); font-weight: 700; font-size: 13px;
-            cursor: pointer; transition: 0.15s; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+        .lot-label { font-size: 10px; color: var(--gold); text-transform: uppercase; margin-bottom: 4px; }
+        .lot-value { font-family: monospace; font-size: 22px; font-weight: 800; color: var(--gold); }
+        .pnl-box {
+            margin-top: 12px; padding: 12px; border-radius: 12px; text-align: center;
+            display: none; border: 1px solid;
         }
-        .btn-bot-toggle:hover { border-color: var(--border-medium); }
-        .btn-bot-toggle.active {
-            background: linear-gradient(135deg, var(--green), var(--green-dark));
-            border-color: var(--green); color: #000; box-shadow: var(--shadow-green);
+        .pnl-box.pos { background: rgba(0,212,170,0.08); border-color: rgba(0,212,170,0.2); }
+        .pnl-box.neg { background: rgba(255,71,87,0.08); border-color: rgba(255,71,87,0.2); }
+        .pnl-value { font-family: monospace; font-size: 24px; font-weight: 800; }
+        .pnl-value.pos { color: var(--green); }
+        .pnl-value.neg { color: var(--red); }
+        .controls {
+            grid-column: 1 / -1; display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 16px;
         }
-        .bot-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); }
-        .btn-bot-toggle.active .bot-indicator { background: #000; box-shadow: 0 0 6px #000; }
-        .log-card { grid-column: 1 / -1; }
+        .btn-bot {
+            padding: 10px 24px; border: 2px solid var(--border); background: rgba(26,26,46,0.8);
+            color: var(--muted); border-radius: 8px; font-weight: 700; cursor: pointer;
+        }
+        .btn-bot.active {
+            background: linear-gradient(135deg, var(--green), #00a888);
+            border-color: var(--green); color: #000; box-shadow: 0 0 20px rgba(0,212,170,0.3);
+        }
+        .log { grid-column: 1 / -1; }
         .log-container {
-            background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
-            padding: 12px; max-height: 120px; overflow-y: auto; font-family: 'JetBrains Mono', monospace;
-            font-size: 11px; line-height: 1.6;
+            background: rgba(0,0,0,0.4); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px; max-height: 120px; overflow-y: auto;
+            font-family: monospace; font-size: 11px;
         }
-        .log-container::-webkit-scrollbar { width: 4px; }
-        .log-container::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 2px; }
-        .log-entry { display: flex; gap: 8px; padding: 2px 0; }
-        .log-time { color: var(--text-dim); white-space: nowrap; }
-        .log-icon { white-space: nowrap; }
-        .log-msg { color: var(--text-secondary); }
+        .log-entry { padding: 2px 0; }
+        .log-time { color: var(--muted); margin-right: 8px; }
         .log-msg.alert { color: var(--gold); }
         .log-msg.error { color: var(--red); }
         .log-msg.success { color: var(--green); }
-        .rules-card { grid-column: 1 / -1; }
-        .rules-list { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-        .rules-list li {
-            display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary);
-            padding: 8px 12px; background: var(--bg-tertiary); border-radius: var(--radius-sm);
-            border: 1px solid var(--border-subtle);
-        }
-        .rules-list li .check { color: var(--green); font-weight: 700; }
-        .footer { text-align: center; padding: 20px; color: var(--text-dim); font-size: 11px; }
         @media (max-width: 768px) {
-            .app-container { padding: 12px; }
-            .top-bar { flex-direction: column; gap: 12px; align-items: stretch; }
-            .top-bar-left, .top-bar-right { justify-content: center; }
-            .main-grid { grid-template-columns: 1fr; }
-            .price-card, .vol-card { grid-column: 1; }
+            .grid { grid-template-columns: 1fr; }
             .indicators-grid { grid-template-columns: repeat(2, 1fr); }
             .exit-grid { grid-template-columns: 1fr; }
-            .controls-card { flex-direction: column; }
-            .rules-list { grid-template-columns: 1fr; }
-            .price-value { font-size: 28px; }
-        }
-        @media (max-width: 480px) {
-            .indicators-grid { grid-template-columns: 1fr 1fr; }
-            .signal-text { font-size: 18px; }
-            .signal-icon { font-size: 32px; }
+            .price { font-size: 28px; }
         }
     </style>
 </head>
 <body>
-<div class="app-container">
-    <div class="top-bar">
-        <div class="top-bar-left">
-            <div class="logo">
-                <div class="logo-icon">🎯</div>
-                <div><div class="logo-text">Timing <span>Pro</span></div></div>
-                <span class="logo-badge">ULTRA V2</span>
-            </div>
+<div class="container">
+    <div class="header">
+        <div class="logo">🎯 Timing <span>Pro</span> ULTRA</div>
+        <div class="status" id="connStatus">
+            <span class="dot"></span>
+            <span id="connText">CONECTANDO...</span>
         </div>
-        <div class="top-bar-center">
-            <div class="connection-status" id="connStatus">
-                <span class="status-dot"></span>
-                <span id="connText">CONECTANDO...</span>
-            </div>
-        </div>
-        <div class="top-bar-right">
-            <div class="sym-selector">
-                <label>Par</label>
-                <input type="text" id="inputSym" value="BTCUSDT" autocomplete="off">
-            </div>
-            <button class="btn-restart" onclick="Engine.restart()">🔄 Reiniciar</button>
+        <div class="input-group">
+            <input type="text" id="inputSym" value="BTCUSDT" placeholder="PAR">
+            <button onclick="Engine.restart()">🔄 Reiniciar</button>
         </div>
     </div>
 
-    <div class="main-grid">
-        <div class="card price-card">
-            <div class="card-header">
-                <div class="card-title"><span class="icon">💰</span> Preço Atual</div>
-                <span class="logo-badge" id="displaySym">BTCUSDT</span>
+    <div class="grid">
+        <div class="card">
+            <div class="card-title">💰 PREÇO ATUAL <span id="displaySym" style="float:right;font-size:10px;background:rgba(240,185,11,0.15);color:var(--gold);padding:2px 8px;border-radius:20px;">BTCUSDT</span></div>
+            <div>
+                <span class="price" id="curPrice">--.--</span>
+                <span class="change" id="priceChange">--.--%</span>
             </div>
-            <div class="price-display">
-                <span class="price-value" id="curPrice">--.--</span>
-                <span class="price-change" id="priceChange">--.--%</span>
-            </div>
-            <div class="price-sub" id="priceSub">Aguardando dados...</div>
+            <div style="margin-top:8px;font-size:12px;color:var(--muted);" id="priceSub">Aguardando...</div>
         </div>
 
-        <div class="card vol-card">
-            <div class="card-header">
-                <div class="card-title"><span class="icon">📊</span> Volatilidade (ATR%)</div>
+        <div class="card">
+            <div class="card-title">📊 VOLATILIDADE (ATR%)</div>
+            <div style="font-family:monospace;font-size:28px;font-weight:800;" id="valAtrPct">--.--%</div>
+            <span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;" id="volBadge">?</span>
+            <div style="height:6px;background:rgba(26,26,46,0.8);border-radius:3px;margin:8px 0;overflow:hidden;">
+                <div id="volBarFill" style="height:100%;width:0%;transition:0.5s;"></div>
             </div>
-            <div class="vol-meter">
-                <span class="vol-value" id="valAtrPct">--.--%</span>
-                <span class="vol-badge" id="volBadge">?</span>
-            </div>
-            <div class="vol-bar-bg">
-                <div class="vol-bar-fill" id="volBarFill" style="width: 0%"></div>
-            </div>
-            <div class="vol-range">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);">
                 <span>0%</span><span>Ideal: 0.5% – 3.0%</span><span>5%</span>
             </div>
         </div>
 
-        <div class="card signal-card wait-signal" id="signalCard">
-            <span class="signal-icon" id="signalIcon">🔍</span>
-            <div class="signal-text wait-text" id="signalText">AGUARDANDO CONFIRMAÇÃO...</div>
-            <div class="signal-sub" id="signalSub">Analisando mercado...</div>
-            <div class="signal-reasons" id="signalReasons"></div>
+        <div class="card signal wait" id="signalCard">
+            <div class="signal-icon" id="signalIcon">🔍</div>
+            <div class="signal-text" id="signalText">AGUARDANDO CONFIRMAÇÃO...</div>
+            <div style="font-size:13px;color:var(--muted);" id="signalSub">Analisando mercado...</div>
+            <div style="display:flex;justify-content:center;gap:8px;margin-top:12px;flex-wrap:wrap;" id="signalReasons"></div>
         </div>
 
-        <div class="card indicators-card">
-            <div class="card-header">
-                <div class="card-title"><span class="icon">📈</span> Indicadores Técnicos</div>
-            </div>
+        <div class="card indicators">
+            <div class="card-title">📈 INDICADORES TÉCNICOS</div>
             <div class="indicators-grid">
-                <div class="indicator-item">
+                <div class="indicator">
                     <div class="indicator-label">RSI (14)</div>
                     <div class="indicator-value" id="valRsi">--</div>
-                    <div class="indicator-status neutral" id="rsiStatus">Neutro</div>
+                    <span class="status-badge neutral" id="rsiStatus">Neutro</span>
                 </div>
-                <div class="indicator-item">
+                <div class="indicator">
                     <div class="indicator-label">EMA 21</div>
                     <div class="indicator-value" id="valEma21">--</div>
-                    <div class="indicator-status neutral" id="trendStatus">Aguardando</div>
+                    <span class="status-badge neutral" id="trendStatus">Aguardando</span>
                 </div>
-                <div class="indicator-item">
+                <div class="indicator">
                     <div class="indicator-label">MACD</div>
                     <div class="indicator-value" id="valMacd">--</div>
-                    <div class="indicator-status neutral" id="macdStatus">Neutro</div>
+                    <span class="status-badge neutral" id="macdStatus">Neutro</span>
                 </div>
-                <div class="indicator-item">
+                <div class="indicator">
                     <div class="indicator-label">ATR</div>
                     <div class="indicator-value" id="valAtr">--</div>
-                    <div class="indicator-status neutral" id="atrStatus">Calculando</div>
+                    <span class="status-badge neutral" id="atrStatus">Calculando</span>
                 </div>
             </div>
-            <div class="macd-section">
-                <div class="macd-bar-container">
-                    <div class="macd-center-line"></div>
-                    <div class="macd-fill" id="macdFill"></div>
-                </div>
-                <div class="macd-labels">
-                    <span>🔻 Venda</span><span>⚪ Zero</span><span>🟢 Compra</span>
-                </div>
+            <div class="macd-bar">
+                <div class="macd-line"></div>
+                <div class="macd-fill" id="macdFill"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px;">
+                <span>🔻 Venda</span><span>⚪ Zero</span><span>🟢 Compra</span>
             </div>
         </div>
 
-        <div class="card exit-card">
-            <div class="card-header">
-                <div class="card-title"><span class="icon">🚪</span> Gestão de Risco</div>
-            </div>
+        <div class="card">
+            <div class="card-title">🚪 GESTÃO DE RISCO</div>
             <div class="exit-grid">
                 <div class="exit-item stop">
                     <div class="exit-label">🛑 Stop Loss</div>
-                    <div class="exit-value stop-val" id="calcStop">--.--</div>
-                    <div class="exit-mult">1.5× ATR</div>
+                    <div class="exit-value stop" id="calcStop">--.--</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:4px;">1.5× ATR</div>
                 </div>
                 <div class="exit-item trailing">
                     <div class="exit-label">🔄 Trailing</div>
-                    <div class="exit-value trailing-val" id="calcTrail">--.--</div>
-                    <div class="exit-mult">+1× ATR</div>
+                    <div class="exit-value trailing" id="calcTrail">--.--</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:4px;">+1× ATR</div>
                 </div>
                 <div class="exit-item tp">
                     <div class="exit-label">✅ Take Profit</div>
-                    <div class="exit-value tp-val" id="calcTp">--.--</div>
-                    <div class="exit-mult">2.5× ATR</div>
+                    <div class="exit-value tp" id="calcTp">--.--</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:4px;">2.5× ATR</div>
                 </div>
             </div>
-            <div class="lot-section">
+            <div class="lot-box">
                 <div class="lot-label">📊 Lote Sugerido (Risco R$ 100)</div>
                 <div class="lot-value" id="calcLot">--.---- un</div>
             </div>
             <div class="pnl-box" id="pnlBox">
-                <div class="pnl-label">P&L Atual</div>
+                <div style="font-size:10px;color:var(--muted);">P&L ATUAL</div>
                 <div class="pnl-value" id="pnlVal">--.--%</div>
             </div>
         </div>
 
-        <div class="card controls-card">
-            <div class="config-grid">
-                <div class="config-item">
-                    <span class="config-label">Risco/Op</span>
-                    <span class="config-value">R$ 100.00</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">Stop</span>
-                    <span class="config-value">1.5× ATR</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">Alvo</span>
-                    <span class="config-value">2.5× ATR</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">Timeframe</span>
-                    <span class="config-value">15m</span>
-                </div>
+        <div class="card controls">
+            <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                <div><div style="font-size:9px;color:var(--muted);">Risco/Op</div><div style="font-family:monospace;color:var(--gold);font-weight:600;">R$ 100.00</div></div>
+                <div><div style="font-size:9px;color:var(--muted);">Stop</div><div style="font-family:monospace;color:var(--gold);font-weight:600;">1.5× ATR</div></div>
+                <div><div style="font-size:9px;color:var(--muted);">Alvo</div><div style="font-family:monospace;color:var(--gold);font-weight:600;">2.5× ATR</div></div>
+                <div><div style="font-size:9px;color:var(--muted);">Timeframe</div><div style="font-family:monospace;color:var(--gold);font-weight:600;">15m</div></div>
             </div>
-            <button class="btn-bot-toggle" id="botToggle" onclick="Engine.toggleBot()">
-                <span class="bot-indicator"></span>BOT: OFF
+            <button class="btn-bot" id="botToggle" onclick="Engine.toggleBot()">
+                BOT: OFF
             </button>
         </div>
 
-        <div class="card log-card">
-            <div class="card-header">
-                <div class="card-title"><span class="icon">📋</span> Log</div>
-                <span style="font-size:10px; color:var(--text-dim);" id="logCount">0 entradas</span>
-            </div>
+        <div class="card log">
+            <div class="card-title">📋 LOG <span style="float:right;font-size:10px;color:var(--muted);" id="logCount">0 entradas</span></div>
             <div class="log-container" id="log"></div>
-        </div>
-
-        <div class="card rules-card">
-            <div class="card-header">
-                <div class="card-title"><span class="icon">✅</span> Regras de Entrada</div>
-            </div>
-            <ul class="rules-list">
-                <li><span class="check">✓</span> MACD cruza zero com direção</li>
-                <li><span class="check">✓</span> Volatilidade 0.5% – 3.0%</li>
-                <li><span class="check">✓</span> Preço alinhado com EMA21</li>
-                <li><span class="check">✓</span> RSI fora de extremos (&lt;25 ou &gt;75)</li>
-            </ul>
         </div>
     </div>
 
-    <div class="footer">
-        🎯 Timing Pro ULTRA v2.0 • Dados: Binance • Atualização: Real-Time
+    <div style="text-align:center;padding:20px;color:var(--muted);font-size:11px;">
+        🎯 Timing Pro ULTRA v2.0 • WebSocket: Tempo Real • Dados: Binance
     </div>
 </div>
 
-<script src="/js/app.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>
