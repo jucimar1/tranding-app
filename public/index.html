@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎯 Trading MVP</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0b0e11; color: #eaecef; text-align: center; padding: 20px; }
+    .card { background: #151a21; border: 1px solid #2b3139; border-radius: 12px; padding: 20px; margin: 20px auto; max-width: 400px; }
+    h1 { color: #f0b90b; margin: 0 0 10px; }
+    .price { font-size: 36px; font-weight: 800; color: #0ecb81; margin: 15px 0; font-family: monospace; }
+    button { padding: 12px 20px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; margin: 5px; transition: 0.2s; }
+    .btn-upd { background: #f0b90b; color: #000; }
+    .btn-tg  { background: #232830; color: #fff; border: 1px solid #f0b90b; }
+    .btn-upd:hover, .btn-tg:hover { filter: brightness(1.1); }
+    #status { margin-top: 15px; font-size: 13px; color: #848e9c; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎯 Trading MVP</h1>
+    <p>Teste rápido: Binance + Telegram</p>
+    <div class="price" id="price">--</div>
+    <button class="btn-upd" onclick="getPrice()">🔄 Atualizar Preço</button>
+    <hr style="border-color:#2b3139; margin:15px 0;">
+    <button class="btn-tg" onclick="sendAlert()">📢 Enviar Alerta Telegram</button>
+    <div id="status">Pronto.</div>
+  </div>
+
+  <script>
+    let lastPrice = 0;
+    const elPrice = document.getElementById('price');
+    const elStatus = document.getElementById('status');
+
+    async function getPrice() {
+      elStatus.innerText = 'Buscando dados...';
+      try {
+        const res = await fetch('/api/price?symbol=BTCUSDT');
+        const data = await res.json();
+        lastPrice = parseFloat(data.price);
+        elPrice.innerText = `$ ${lastPrice.toFixed(2)}`;
+        elStatus.innerText = '✅ Conectado na Binance';
+      } catch (e) {
+        elPrice.innerText = 'Erro';
+        elStatus.innerText = '❌ Falha na conexão';
+      }
+    }
+
+    async function sendAlert() {
+      if (!lastPrice) return alert('Atualize o preço primeiro!');
+      elStatus.innerText = 'Enviando para Telegram...';
+      try {
+        const res = await fetch('/api/alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: `🔔 ALERTA\n💰 BTCUSDT: $${lastPrice}\n⏱️ ${new Date().toLocaleTimeString()}` })
+        });
+        const json = await res.json();
+        elStatus.innerText = json.ok ? '✅ Telegram enviado!' : `❌ ${json.description || 'Erro'}`;
+      } catch (e) {
+        elStatus.innerText = '❌ Falha ao enviar';
+      }
+    }
+
+    window.onload = getPrice;
+    setInterval(getPrice, 5000);
+  </script>
+</body>
+</html>
