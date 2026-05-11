@@ -1,552 +1,368 @@
-/**
- * 🎯 TIMING PRO ULTRA v2.0 — REAL-TIME TRADING
- * PWA com notificações e fallback REST
- */
-
+// Configurações
 const CFG = {
-    riskPerTrade: 100,
-    slMult: 1.5,
-    tpMult: 2.5,
-    trailTrigger: 1.0,
-    minVol: 0.005,
-    maxVol: 0.03,
-    rsiBuyMin: 30,
-    rsiBuyMax: 65,
-    rsiSellMin: 35,
-    rsiSellMax: 70,
-    interval: '15m',
-    limit: 100,
-    telegram: { enabled: false }
+    riskPerTrade: 100, slMult: 1.5, tpMult: 2.5, trailTrigger: 1.0,
+    minVol: 0.005, maxVol: 0.03,
+    rsiBuyMin: 30, rsiBuyMax: 65, rsiSellMin: 35, rsiSellMax: 70,
+    interval: '15m', limit: 100, telegram: { enabled: true }
 };
 
+// Estado
 const S = {
-    sym: 'BTCUSDT',
-    price: 0,
-    change: 0,
-    bot: false,
-    connected: false,
-    ws: null,
-    wsReconnectAttempts: 0,
-    ind: { rsi: 0, atr: 0, atrPct: 0, macd: 0, sig: 0, hist: 0, ema21: 0 },
-    histHistory: [],
-    klines: [],
-    pos: null,
-    lastSignal: null,
-    logTime: 0,
-    logCount: 0,
-    useRestFallback: false
+    sym: 'BTCUSDT', price: 0, change: 0, bot: false, connected: false,
+    ws: null, wsRetries: 0,
+    ind: { rsi: 0, atr: 0, macd: 0, sig: 0, hist: 0, ema21: 0 },
+    hist: [], klines: [], pos: null, lastSig: null, logTime: 0, logCount: 0
 };
 
-// 🧮 UTILITÁRIOS
+// Matemática
 const M = {
-    sma(p, n) { return p.slice(-n).reduce((a, b) => a + b, 0) / n; },
-    ema(p, n) {
+    sma: (p, n) => p.slice(-n).reduce((a, b) => a + b, 0) / n,
+    ema: (p, n) => {
         if (p.length < n) return null;
         let v = M.sma(p, n), k = 2 / (n + 1);
         for (let i = n; i < p.length; i++) v = (p[i] - v) * k + v;
         return v;
     },
-    atr(k, n = 14) {
+    atr: (k, n = 14) => {
         if (k.length < n + 1) return 0;
         let sum = 0;
         for (let i = 1; i <= n; i++) {
-            const h = +k[i][2], l = +k[i][3], pc = +k[i - 1][4];
-            sum += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+            const h = +k[i][2], l = +k[i][3], pc = +k[i-1][4];
+            sum += Math.max(h-l, Math.abs(h-pc), Math.abs(l-pc));
         }
         return sum / n;
     },
-    rsi(p, n = 14) {
+    rsi: (p, n = 14) => {
         if (p.length < n + 1) return 50;
         let g = 0, l = 0;
         for (let i = p.length - n; i < p.length; i++) {
-            const d = p[i] - p[i - 1];
-            d >= 0 ? g += d : l -= d;
+            const d = p[i] - p[i-1]; d >= 0 ? g += d : l -= d;
         }
-        const ag = g / n, al = l / n;
-        return al === 0 ? 100 : 100 - (100 / (1 + ag / al));
+        const ag = g/n, al = l/n;
+        return al === 0 ? 100 : 100 - (100 / (1 + ag/al));
     },
-    norm(v, max) { return Math.max(-1, Math.min(1, v / max)); }
+    norm: (v, max) => Math.max(-1, Math.min(1, v / max))
 };
 
-// 📈 MACD
+// MACD
 const MACD = {
-    calc(closes, f = 12, sl = 26, sp = 9) {
+    calc: (closes, f = 12, sl = 26, sp = 9) => {
         if (closes.length < sl + sp) return { last: null };
         const ef = [], es = [];
         let vf = M.sma(closes, f), vs = M.sma(closes, sl);
         for (let i = 0; i < closes.length; i++) {
-            vf = i < f ? M.sma(closes.slice(0, i + 1), i + 1) : (closes[i] - vf) * (2 / (f + 1)) + vf;
-            vs = i < sl ? M.sma(closes.slice(0, i + 1), i + 1) : (closes[i] - vs) * (2 / (sl + 1)) + vs;
+            vf = i < f ? M.sma(closes.slice(0, i+1), i+1) : (closes[i] - vf) * (2/(f+1)) + vf;
+            vs = i < sl ? M.sma(closes.slice(0, i+1), i+1) : (closes[i] - vs) * (2/(sl+1)) + vs;
             ef.push(vf); es.push(vs);
         }
         const macd = ef.map((a, i) => a - es[i]);
-        const sig = [], k = 2 / (sp + 1);
-        let vsig = M.sma(macd.slice(sl, sl + sp), sp);
+        const sig = [], k = 2/(sp+1);
+        let vsig = M.sma(macd.slice(sl, sl+sp), sp);
         for (let i = 0; i < macd.length; i++) {
-            if (i < sl + sp - 1) sig.push(null);
-            else if (i === sl + sp - 1) sig.push(vsig);
+            if (i < sl+sp-1) sig.push(null);
+            else if (i === sl+sp-1) sig.push(vsig);
             else { vsig = (macd[i] - vsig) * k + vsig; sig.push(vsig); }
         }
         const hist = macd.map((m, i) => sig[i] !== null ? m - sig[i] : null);
-        const lastIdx = hist.slice().reverse().findIndex(x => x !== null);
-        const idx = lastIdx === -1 ? -1 : hist.length - 1 - lastIdx;
-        return {
-            last: idx >= 0 ? { m: macd[idx], s: sig[idx], h: hist[idx] } : null,
-            hist
-        };
+        const idx = hist.slice().reverse().findIndex(x => x !== null);
+        const realIdx = idx === -1 ? -1 : hist.length - 1 - idx;
+        return { last: realIdx >= 0 ? { m: macd[realIdx], s: sig[realIdx], h: hist[realIdx] } : null, hist };
     },
-    cross(hh) {
+    cross: (hh) => {
         const v = hh.filter(x => x !== null).slice(-3);
         if (v.length < 2) return null;
-        return (v[v.length - 2] < 0 && v[v.length - 1] >= 0) ? 'bull' :
-               (v[v.length - 2] > 0 && v[v.length - 1] <= 0) ? 'bear' : null;
+        return (v[v.length-2] < 0 && v[v.length-1] >= 0) ? 'bull' :
+               (v[v.length-2] > 0 && v[v.length-1] <= 0) ? 'bear' : null;
     }
 };
 
-// 🎯 ESTRATÉGIA
+// Estratégia
 const Strat = {
-    vol(atr, price) {
+    vol: (atr, price) => {
         if (!atr || !price) return { ok: false, t: 'N/A', b: '' };
         const p = atr / price;
         if (p < CFG.minVol) return { ok: false, t: 'Baixa', b: 'low' };
         if (p > CFG.maxVol) return { ok: false, t: 'Excessiva', b: 'high' };
         return { ok: true, t: 'Ideal', b: 'ideal', p };
     },
-    trend(price, ema21) {
-        if (!price || !ema21) return { d: null, t: 'Aguardando...' };
+    trend: (price, ema21) => {
+        if (!price || !ema21) return { d: null, t: 'Aguardando' };
         const diff = (price - ema21) / ema21;
         return diff > 0.01 ? { d: 'alta', t: 'Alta' } :
-               diff < -0.01 ? { d: 'baixa', t: 'Baixa' } :
-               { d: 'lateral', t: 'Lateral' };
+               diff < -0.01 ? { d: 'baixa', t: 'Baixa' } : { d: 'lateral', t: 'Lateral' };
     },
-    exits(entry, atr, dir) {
+    exits: (entry, atr, dir) => {
         const sd = atr * CFG.slMult, td = atr * CFG.tpMult, trd = atr * CFG.trailTrigger;
-        return dir === 'BUY' ? { stop: entry - sd, tp: entry + td, trailTrig: entry + trd, sd, td } :
-                             { stop: entry + sd, tp: entry - td, trailTrig: entry - trd, sd, td };
+        return dir === 'BUY' ? { stop: entry - sd, tp: entry + td, trailTrig: entry + trd } :
+                               { stop: entry + sd, tp: entry - td, trailTrig: entry - trd };
     },
-    checkExit(pos, price, ind) {
+    checkExit: (pos, price, ind) => {
         if (!pos) return null;
         const { entry, dir, stop, tp, trailTrig } = pos;
         if (dir === 'BUY') {
             if (price <= stop) return { r: '🛑 STOP LOSS', t: 'stop' };
             if (price >= tp) return { r: '✅ TAKE PROFIT', t: 'target' };
-            if (!pos.trailActive && price >= trailTrig) {
-                pos.trailActive = true;
-                UI.log('🔄 Trailing ativado!', 'success');
-            }
-            if (ind.hist < 0 && pos.macdHist > 0 && ind.hist < -Math.abs(ind.m) * 0.3)
-                return { r: '⚠️ MACD Reverteu', t: 'early' };
+            if (!pos.trailActive && price >= trailTrig) { pos.trailActive = true; UI.log('Trailing ativado!', 'success'); }
         } else {
             if (price >= stop) return { r: '🛑 STOP LOSS', t: 'stop' };
             if (price <= tp) return { r: '✅ TAKE PROFIT', t: 'target' };
-            if (!pos.trailActive && price <= trailTrig) {
-                pos.trailActive = true;
-                UI.log('🔄 Trailing ativado!', 'success');
-            }
-            if (ind.hist > 0 && pos.macdHist < 0 && ind.hist > Math.abs(ind.m) * 0.3)
-                return { r: '⚠️ MACD Reverteu', t: 'early' };
+            if (!pos.trailActive && price <= trailTrig) { pos.trailActive = true; UI.log('Trailing ativado!', 'success'); }
         }
         return null;
     }
 };
 
-// 🖥️ UI
+// UI
 const UI = {
     el: id => document.getElementById(id),
-    log(msg, type = 'info') {
+    log: (msg, type = 'info') => {
         const now = Date.now();
         if (now - S.logTime < 400) return;
-        S.logTime = now;
-        S.logCount++;
+        S.logTime = now; S.logCount++;
         const el = UI.el('log');
         const time = new Date().toLocaleTimeString('pt-BR');
-        const icons = { alert: '🚨', err: '❌', success: '✅', info: '💬', warn: '⚠️' };
-        const classes = { alert: 'alert', err: 'error', success: 'success', warn: 'alert', info: '' };
         const entry = document.createElement('div');
         entry.className = 'log-entry';
-        entry.innerHTML = `
-            <span class="log-time">${time}</span>
-            <span class="log-icon">${icons[type] || ''}</span>
-            <span class="log-msg ${classes[type] || ''}">${msg}</span>
-        `;
+        entry.innerHTML = `<span class="log-time">${time}</span><span class="log-msg ${type}">${msg}</span>`;
         el.insertBefore(entry, el.firstChild);
         while (el.children.length > 50) el.removeChild(el.lastChild);
         UI.el('logCount').innerText = `${S.logCount} entradas`;
     },
-    signal(text, icon, sub, type, reasons = [], isNew = false) {
+    signal: (text, icon, sub, type, reasons = [], isNew = false) => {
         const card = UI.el('signalCard');
-        card.className = `card signal-card ${type}-signal${isNew ? ' signal-new' : ''}`;
+        card.className = `card signal ${type}${isNew ? ' signal-new' : ''}`;
         UI.el('signalIcon').innerText = icon;
         const textEl = UI.el('signalText');
         textEl.innerText = text;
-        textEl.className = `signal-text ${type}-text`;
+        textEl.className = `signal-text`;
         UI.el('signalSub').innerText = sub;
         const reasonsEl = UI.el('signalReasons');
-        let reasonsHTML = reasons.map(r =>
-            `<span class="reason-tag ${type === 'buy' ? 'active' : ''}">${r}</span>`
-        ).join('');
-        if (type === 'wait' && text.includes('Baixa')) {
-            reasonsHTML += `
-                <span class="reason-tag" style="background: rgba(240,185,11,0.1); color: var(--gold);">
-                    ⏳ Aguardando volatilidade ≥ 0.5%
-                </span>
-            `;
-        }
-        reasonsEl.innerHTML = reasonsHTML;
-        if (isNew) setTimeout(() => card.classList.remove('signal-new'), 1500);
+        reasonsEl.innerHTML = reasons.map(r => `<span style="padding:4px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.06);border-radius:20px;font-size:11px;font-weight:600;">${r}</span>`).join('');
     },
-    vol(atrPct, volInfo) {
+    vol: (atrPct, info) => {
         UI.el('valAtrPct').innerText = `${(atrPct * 100).toFixed(2)}%`;
         const badge = UI.el('volBadge');
-        badge.innerText = volInfo.t;
-        badge.className = `vol-badge ${volInfo.b}`;
+        badge.innerText = info.t;
+        badge.className = `vol-badge ${info.b === 'ideal' ? 'bullish' : info.b === 'low' ? 'bearish' : 'bearish'}`;
+        badge.style.background = info.b === 'ideal' ? 'rgba(0,212,170,0.12)' : 'rgba(255,71,87,0.12)';
+        badge.style.color = info.b === 'ideal' ? 'var(--green)' : 'var(--red)';
         const fill = UI.el('volBarFill');
-        const pct = Math.min((atrPct / 0.05) * 100, 100);
-        fill.style.width = `${pct}%`;
-        fill.className = `vol-bar-fill ${volInfo.b}`;
+        fill.style.width = `${Math.min((atrPct / 0.05) * 100, 100)}%`;
+        fill.style.background = info.b === 'ideal' ? 'linear-gradient(90deg, var(--green), #00ffcc)' : 'linear-gradient(90deg, #cc3344, var(--red))';
     },
-    macd(hist, atr) {
+    macd: (hist, atr) => {
         const fill = UI.el('macdFill');
-        if (!atr || hist === null || hist === undefined) {
-            fill.style.width = '0%';
-            return;
-        }
-        const str = M.norm(hist, atr * 0.8);
-        const w = Math.abs(str) * 100;
-        fill.className = `macd-fill ${hist >= 0 ? 'positive' : 'negative'}`;
+        if (!atr || hist === null) { fill.style.width = '0%'; return; }
+        const w = Math.abs(M.norm(hist, atr * 0.8)) * 100;
+        fill.className = `macd-fill ${hist >= 0 ? 'pos' : 'neg'}`;
         fill.style.width = `${w}%`;
         fill.style.left = hist >= 0 ? '50%' : `${50 - w}%`;
     },
-    indicators(rsi, ema21, trend, macdHist, macdStatus, atr, atrStatus) {
+    indicators: (rsi, ema21, trend, macdH, atr, volOk) => {
         UI.el('valRsi').innerText = rsi.toFixed(1);
         const rsiEl = UI.el('rsiStatus');
         rsiEl.innerText = rsi < 25 ? 'Sobrevendido' : rsi > 75 ? 'Sobrecomprado' : 'Neutro';
-        rsiEl.className = `indicator-status ${rsi < 25 ? 'bearish' : rsi > 75 ? 'bearish' : 'neutral'}`;
+        rsiEl.className = `status-badge ${rsi < 25 ? 'bearish' : rsi > 75 ? 'bearish' : 'neutral'}`;
         UI.el('valEma21').innerText = `$${ema21.toFixed(0)}`;
         const trendEl = UI.el('trendStatus');
         trendEl.innerText = trend.t;
-        trendEl.className = `indicator-status ${trend.d === 'alta' ? 'bullish' : trend.d === 'baixa' ? 'bearish' : 'neutral'}`;
-        UI.el('valMacd').innerText = macdStatus;
-        const macdEl = UI.el('macdStatus');
-        macdEl.innerText = macdHist > 0.0001 ? 'Positivo' : macdHist < -0.0001 ? 'Negativo' : 'Neutro';
-        macdEl.className = `indicator-status ${macdHist > 0.0001 ? 'bullish' : macdHist < -0.0001 ? 'bearish' : 'neutral'}`;
+        trendEl.className = `status-badge ${trend.d === 'alta' ? 'bullish' : trend.d === 'baixa' ? 'bearish' : 'neutral'}`;
+        UI.el('valMacd').innerText = macdH > 0.0001 ? 'Positivo' : macdH < -0.0001 ? 'Negativo' : 'Neutro';
+        UI.el('macdStatus').innerText = macdH > 0.0001 ? 'Positivo' : 'Neutro';
         UI.el('valAtr').innerText = atr.toFixed(2);
-        const atrEl = UI.el('atrStatus');
-        atrEl.innerText = atrStatus;
-        atrEl.className = `indicator-status ${atrStatus === 'OK' ? 'bullish' : 'neutral'}`;
+        UI.el('atrStatus').innerText = volOk ? 'OK' : '---';
+        UI.el('atrStatus').className = `status-badge ${volOk ? 'bullish' : 'neutral'}`;
     },
-    exits(e) {
+    exits: (e) => {
         UI.el('calcStop').innerText = `$${e.stop.toFixed(2)}`;
         UI.el('calcTrail').innerText = `$${e.trailTrig.toFixed(2)}`;
         UI.el('calcTp').innerText = `$${e.tp.toFixed(2)}`;
     },
-    lot(atr) {
+    lot: (atr) => {
         if (!atr || !S.price) return;
-        const d = atr * CFG.slMult;
-        UI.el('calcLot').innerText = `${(CFG.riskPerTrade / d).toFixed(4)} un`;
+        UI.el('calcLot').innerText = `${(CFG.riskPerTrade / (atr * CFG.slMult)).toFixed(4)} un`;
     },
-    pnl() {
+    pnl: () => {
         const box = UI.el('pnlBox');
         if (!S.pos?.active || !S.price) { box.style.display = 'none'; return; }
         box.style.display = 'block';
         const pnl = (S.price - S.pos.entry) / (S.pos.dir === 'BUY' ? 1 : -1) / S.pos.entry * 100;
         const pos = pnl >= 0;
-        box.className = `pnl-box ${pos ? 'positive' : 'negative'}`;
+        box.className = `pnl-box ${pos ? 'pos' : 'neg'}`;
         const valEl = UI.el('pnlVal');
         valEl.innerText = `${pos ? '+' : ''}${pnl.toFixed(2)}%`;
-        valEl.className = `pnl-value ${pos ? 'positive' : 'negative'}`;
+        valEl.className = `pnl-value ${pos ? 'pos' : 'neg'}`;
     },
-    updatePrice(price, change, symbol) {
-        const priceEl = UI.el('curPrice');
-        priceEl.innerText = `$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        priceEl.className = `price-value ${change >= 0 ? 'up' : 'down'}`;
-        const changeEl = UI.el('priceChange');
-        changeEl.innerText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
-        changeEl.className = `price-change ${change >= 0 ? 'up' : 'down'}`;
+    updatePrice: (price, change, symbol) => {
+        const pEl = UI.el('curPrice');
+        pEl.innerText = `$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        pEl.className = `price ${change >= 0 ? 'up' : 'down'}`;
+        const cEl = UI.el('priceChange');
+        cEl.innerText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+        cEl.className = `change ${change >= 0 ? 'up' : 'down'}`;
         UI.el('displaySym').innerText = symbol;
-        UI.el('priceSub').innerText = `Última atualização: ${new Date().toLocaleTimeString('pt-BR')}`;
+        UI.el('priceSub').innerText = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
     },
-    connection(connected) {
-        S.connected = connected;
+    connection: (c) => {
+        S.connected = c;
         const el = UI.el('connStatus');
-        const text = UI.el('connText');
-        if (connected) {
-            el.className = 'connection-status';
-            text.innerText = 'CONECTADO';
-        } else {
-            el.className = 'connection-status disconnected';
-            text.innerText = 'DESCONECTADO';
-        }
+        const txt = UI.el('connText');
+        if (c) { el.className = 'status'; txt.innerText = 'CONECTADO'; }
+        else { el.className = 'status offline'; txt.innerText = 'DESCONECTADO'; }
     },
-    async alert(msg) {
+    alert: async (msg) => {
         UI.log(msg, 'alert');
         if (!CFG.telegram.enabled) return;
         try {
             await fetch('/api/telegram', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: msg })
             });
         } catch (e) { console.warn('Telegram error', e); }
     }
 };
 
-// 🔌 WEBSOCKET
+// WebSocket
 const WS = {
-    connect() {
+    connect: () => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}`;
-        console.log('🔌 Tentando conectar WebSocket:', wsUrl);
-        S.ws = new WebSocket(wsUrl);
+        const url = `${protocol}//${window.location.host}`;
+        console.log('🔌 WebSocket:', url);
+        
+        S.ws = new WebSocket(url);
+        
         S.ws.onopen = () => {
             console.log('✅ WebSocket conectado');
-            S.wsReconnectAttempts = 0;
-            S.useRestFallback = false;
+            S.wsRetries = 0;
             UI.connection(true);
-            UI.log('Conexão WebSocket estabelecida', 'success');
+            UI.log('WebSocket conectado', 'success');
             S.ws.send(JSON.stringify({ type: 'subscribe', symbol: S.sym }));
         };
-        S.ws.onmessage = (event) => {
+        
+        S.ws.onmessage = (e) => {
             try {
-                const message = JSON.parse(event.data);
-                WS.handleMessage(message);
-            } catch (error) {
-                console.error('Erro parsing WS:', error);
-            }
-        };
-        S.ws.onclose = () => {
-            console.log('❌ WebSocket desconectado');
-            UI.connection(false);
-            if (!S.useRestFallback && S.wsReconnectAttempts < 3) {
-                const delay = Math.min(1000 * Math.pow(2, S.wsReconnectAttempts), 5000);
-                S.wsReconnectAttempts++;
-                UI.log(`Reconectando em ${delay / 1000}s...`, 'warn');
-                setTimeout(WS.connect, delay);
-            } else if (!S.useRestFallback) {
-                console.log('🔄 WebSocket falhou, ativando fallback REST');
-                S.useRestFallback = true;
-                UI.log('WebSocket indisponível. Usando API REST...', 'warn');
-                Engine.loadDataViaRest();
-            }
-        };
-        S.ws.onerror = (error) => {
-            console.error('Erro WebSocket:', error);
-            UI.log('Erro na conexão WebSocket', 'err');
-        };
-    },
-    handleMessage(message) {
-        switch (message.type) {
-            case 'price':
-                S.price = message.data.price;
-                S.change = message.data.change;
-                UI.updatePrice(message.data.price, message.data.change, message.data.symbol);
-                if (S.pos?.active) UI.pnl();
-                break;
-            case 'kline':
-                const candle = message.data;
-                if (S.klines.length > 0 && S.klines[S.klines.length - 1][0] === candle[0]) {
-                    S.klines[S.klines.length - 1] = candle;
-                } else {
-                    S.klines.push(candle);
-                    if (S.klines.length > 100) S.klines.shift();
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'price') {
+                    S.price = msg.data.price; S.change = msg.data.change;
+                    UI.updatePrice(msg.data.price, msg.data.change, msg.data.symbol);
+                    if (S.pos?.active) UI.pnl();
+                } else if (msg.type === 'kline') {
+                    const c = msg.data;
+                    if (S.klines.length > 0 && S.klines[S.klines.length - 1][0] === c[0]) S.klines[S.klines.length - 1] = c;
+                    else { S.klines.push(c); if (S.klines.length > 100) S.klines.shift(); }
+                    Engine.analyze();
+                } else if (msg.type === 'klines') {
+                    S.klines = msg.data;
+                    console.log('📊 Klines:', S.klines.length);
+                    Engine.analyze();
                 }
-                Engine.analyze();
-                break;
-            case 'klines':
-                S.klines = message.data;
-                Engine.analyze();
-                break;
-        }
+            } catch (err) { console.error('Erro WS:', err); }
+        };
+        
+        S.ws.onclose = () => {
+            console.log('❌ WebSocket fechado');
+            UI.connection(false);
+            if (S.wsRetries < 5) {
+                S.wsRetries++;
+                setTimeout(WS.connect, 2000 * S.wsRetries);
+            }
+        };
     }
 };
 
-// 🧠 ENGINE
+// Engine
 const Engine = {
-    async loadDataViaRest() {
-        try {
-            UI.log('Carregando dados via REST API...', 'info');
-            const res = await fetch(`/api/init?symbol=${S.sym}`);
-            if (!res.ok) throw new Error('Erro na API');
-            const data = await res.json();
-            S.price = data.price;
-            S.change = data.change;
-            S.klines = data.klines;
-            UI.updatePrice(data.price, data.change, data.symbol);
-            UI.log('Dados carregados com sucesso via REST', 'success');
-            Engine.analyze();
-            setTimeout(() => {
-                if (S.ws?.readyState !== WebSocket.OPEN) {
-                    S.wsReconnectAttempts = 0;
-                    WS.connect();
-                }
-            }, 10000);
-        } catch (error) {
-            UI.log(`Erro carregando dados: ${error.message}`, 'err');
-        }
-    },
-    installPWA() {
-        if (typeof deferredPrompt !== 'undefined' && deferredPrompt) {
-            deferredPrompt.prompt();
-            deferredPrompt.userChoice.then((choiceResult) => {
-                if (choiceResult.outcome === 'accepted') {
-                    console.log('[PWA] Usuário aceitou instalar');
-                    UI.log('App instalado com sucesso!', 'success');
-                }
-                deferredPrompt = null;
-                document.getElementById('pwaInstallBanner').classList.remove('show');
-            });
-        } else {
-            UI.log('Instalação não disponível. Use o menu do navegador.', 'info');
-        }
-    },
-    requestNotificationPermission() {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission().then(permission => {
-                console.log('[PWA] Permissão de notificação:', permission);
-                if (permission === 'granted') {
-                    UI.log('Notificações ativadas!', 'success');
-                }
-            });
-        }
-    },
-    sendNotification(title, options) {
-        if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, {
-                icon: '/icons/icon-192.png',
-                badge: '/icons/icon-192.png',
-                ...options
-            });
-        }
-    },
-    analyze() {
+    analyze: () => {
         if (S.klines.length < 30 || !S.price) return;
-        try {
-            const closes = S.klines.map(x => +x[4]);
-            const rsi = M.rsi(closes, 14);
-            const atr = M.atr(S.klines, 14);
-            const atrP = atr / S.price;
-            const ema21 = M.ema(closes, 21);
-            const macd = MACD.calc(closes);
-            if (macd.last?.h !== null && macd.last?.h !== undefined) {
-                S.histHistory.push(macd.last.h);
-                if (S.histHistory.length > 20) S.histHistory.shift();
-            }
-            const cross = MACD.cross(S.histHistory);
-            const vol = Strat.vol(atr, S.price);
-            const trend = Strat.trend(S.price, ema21);
-            let act = null, signalText = 'Aguardando confirmação...', signalIcon = '🔍',
-                signalType = 'wait', reasons = [];
-            const buyOK = cross === 'bull' && vol.ok && trend.d === 'alta' &&
-                          rsi >= CFG.rsiBuyMin && rsi <= CFG.rsiBuyMax;
-            const sellOK = cross === 'bear' && vol.ok && trend.d === 'baixa' &&
-                           rsi >= CFG.rsiSellMin && rsi <= CFG.rsiSellMax;
-            if (buyOK) {
-                act = 'BUY'; signalText = 'COMPRA CONFIRMADA'; signalIcon = '🟢';
-                signalType = 'buy';
-                reasons = ['MACD ↑', 'Vol OK', 'Tendência Alta', `RSI ${rsi.toFixed(1)}`];
-            } else if (sellOK) {
-                act = 'SELL'; signalText = 'VENDA CONFIRMADA'; signalIcon = '🔴';
-                signalType = 'sell';
-                reasons = ['MACD ↓', 'Vol OK', 'Tendência Baixa', `RSI ${rsi.toFixed(1)}`];
-            } else {
-                if (!vol.ok) { signalText = `Volatilidade ${vol.t}`; signalIcon = '⏳'; }
-                else if (!cross) { signalText = 'Aguardando MACD...'; signalIcon = ''; }
-                else if (trend.d !== (cross === 'bull' ? 'alta' : 'baixa')) {
-                    signalText = trend.t; signalIcon = '⚖️';
-                }
-                else { signalText = 'Confirmando...'; signalIcon = '🔍'; }
-            }
-            const isNew = act && act !== S.lastSignal;
-            UI.signal(signalText, signalIcon, `Analisando ${S.sym}...`, signalType, reasons, isNew);
-            if (isNew && act) {
-                S.lastSignal = act;
-                Engine.sendNotification(
-                    act === 'BUY' ? '🟢 COMPRA CONFIRMADA' : '🔴 VENDA CONFIRMADA',
-                    {
-                        body: `${S.sym} - ${reasons.join(', ')}`,
-                        tag: 'trading-signal',
-                        requireInteraction: true
-                    }
-                );
-            }
-            const macdStatusText = cross ? (cross === 'bull' ? '↗ Cruzou ↑' : '↘ Cruzou ↓') :
-                                   (macd.last?.h > 0.0001 ? 'Positivo' : macd.last?.h < -0.0001 ? 'Negativo' : 'Neutro');
-            UI.indicators(rsi, ema21, trend, macd.last?.h || 0, macdStatusText, atr, vol.ok ? 'OK' : '---');
-            UI.macd(macd.last?.h, atr);
-            UI.vol(atrP, vol);
-            S.ind = { rsi, atr, atrPct: atrP, m: macd.last?.m, sig: macd.last?.s, hist: macd.last?.h, ema21 };
-            if (act && S.bot && !S.pos?.active) {
-                const e = Strat.exits(S.price, atr, act);
-                S.pos = { entry: S.price, dir: act, ...e, active: true, opened: Date.now(), macdHist: macd.last?.h };
-                UI.exits(e); UI.lot(atr);
-                UI.log(`Nova ${act} @ $${S.price.toFixed(2)}`, 'success');
-                UI.alert(`🎯 <b>${act}</b> em ${S.sym}\n💰 $${S.price.toFixed(2)}\n📊 ${reasons.join(' • ')}`);
-            } else if (S.pos?.active) {
-                const ex = Strat.checkExit(S.pos, S.price, S.ind);
-                if (ex) {
-                    const pnl = ((S.price - S.pos.entry) / (S.pos.dir === 'BUY' ? 1 : -1) / S.pos.entry * 100);
-                    const msg = `${ex.r} em ${S.sym}\n💰 Entrada: $${S.pos.entry.toFixed(2)}\n🔚 Saída: $${S.price.toFixed(2)}\n📊 ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`;
-                    UI.alert(msg);
-                    UI.log(`${ex.r} | ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`, ex.t === 'target' ? 'alert' : 'info');
-                    S.pos = null; UI.el('pnlBox').style.display = 'none';
-                    UI.signal('Aguardando próxima...', '🔁', 'Analisando mercado...', 'neutral');
-                } else {
-                    UI.exits(Strat.exits(S.pos.entry, S.ind.atr, S.pos.dir));
-                    UI.pnl();
-                }
-            }
-            UI.lot(S.ind.atr);
-        } catch (e) {
-            console.error(e);
-            UI.log(`Erro análise: ${e.message}`, 'err');
+        
+        const closes = S.klines.map(x => +x[4]);
+        const rsi = M.rsi(closes, 14);
+        const atr = M.atr(S.klines, 14);
+        const atrP = atr / S.price;
+        const ema21 = M.ema(closes, 21);
+        const macd = MACD.calc(closes);
+        
+        if (macd.last?.h !== null) {
+            S.hist.push(macd.last.h);
+            if (S.hist.length > 20) S.hist.shift();
         }
+        
+        const cross = MACD.cross(S.hist);
+        const vol = Strat.vol(atr, S.price);
+        const trend = Strat.trend(S.price, ema21);
+        
+        let act = null, text = 'Aguardando...', icon = '🔍', type = 'wait', reasons = [];
+        
+        const buyOK = cross === 'bull' && vol.ok && trend.d === 'alta' && rsi >= CFG.rsiBuyMin && rsi <= CFG.rsiBuyMax;
+        const sellOK = cross === 'bear' && vol.ok && trend.d === 'baixa' && rsi >= CFG.rsiSellMin && rsi <= CFG.rsiSellMax;
+        
+        if (buyOK) {
+            act = 'BUY'; text = 'COMPRA CONFIRMADA'; icon = '🟢'; type = 'buy';
+            reasons = ['MACD ↑', 'Vol OK', 'Alta', `RSI ${rsi.toFixed(1)}`];
+        } else if (sellOK) {
+            act = 'SELL'; text = 'VENDA CONFIRMADA'; icon = '🔴'; type = 'sell';
+            reasons = ['MACD ↓', 'Vol OK', 'Baixa', `RSI ${rsi.toFixed(1)}`];
+        } else {
+            if (!vol.ok) { text = `Volatilidade ${vol.t}`; icon = '⏳'; }
+            else if (!cross) { text = 'Aguardando MACD...'; icon = '🔍'; }
+            else { text = trend.t; icon = '⚖️'; }
+        }
+        
+        const isNew = act && act !== S.lastSig;
+        UI.signal(text, icon, `Analisando ${S.sym}...`, type, reasons, isNew);
+        if (isNew && act) {
+            S.lastSig = act;
+            UI.alert(`🎯 <b>${act}</b> em ${S.sym}\n💰 $${S.price.toFixed(2)}\n📊 ${reasons.join(' • ')}`);
+        }
+        
+        UI.indicators(rsi, ema21, trend, macd.last?.h || 0, atr, vol.ok);
+        UI.macd(macd.last?.h, atr);
+        UI.vol(atrP, vol);
+        
+        if (act && S.bot && !S.pos?.active) {
+            const e = Strat.exits(S.price, atr, act);
+            S.pos = { entry: S.price, dir: act, ...e, active: true, macdH: macd.last?.h };
+            UI.exits(e); UI.lot(atr);
+            UI.log(`Nova ${act} @ $${S.price.toFixed(2)}`, 'success');
+        } else if (S.pos?.active) {
+            const ex = Strat.checkExit(S.pos, S.price, { hist: macd.last?.h });
+            if (ex) {
+                const pnl = ((S.price - S.pos.entry) / (S.pos.dir === 'BUY' ? 1 : -1) / S.pos.entry * 100);
+                UI.alert(`${ex.r} em ${S.sym}\n💰 Entrada: $${S.pos.entry.toFixed(2)}\n🔚 Saída: $${S.price.toFixed(2)}\n📊 ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`);
+                UI.log(`${ex.r} | ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%`, 'alert');
+                S.pos = null; UI.el('pnlBox').style.display = 'none';
+                UI.signal('Aguardando...', '🔁', 'Analisando...', 'neutral');
+            } else { UI.exits(Strat.exits(S.pos.entry, atr, S.pos.dir)); UI.pnl(); }
+        }
+        UI.lot(atr);
     },
-    restart() {
+    restart: () => {
         const newSym = UI.el('inputSym').value.toUpperCase().trim() || 'BTCUSDT';
         if (newSym !== S.sym) {
-            S.sym = newSym; S.histHistory = []; S.pos = null; S.lastSignal = null; S.klines = [];
-            UI.signal('Carregando...', '🔄', `Buscando dados de ${newSym}...`, 'neutral');
+            S.sym = newSym; S.hist = []; S.pos = null; S.lastSig = null; S.klines = [];
+            UI.signal('Carregando...', '🔄', `Buscando ${newSym}...`, 'wait');
             UI.log(`Analisando ${newSym}...`);
-            if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+            if (S.ws && S.ws.readyState === 1) {
                 S.ws.send(JSON.stringify({ type: 'subscribe', symbol: newSym }));
-            } else {
-                Engine.loadDataViaRest();
             }
         }
         UI.el('inputSym').value = S.sym;
     },
-    toggleBot() {
+    toggleBot: () => {
         S.bot = !S.bot;
         const b = UI.el('botToggle');
-        b.className = `btn-bot-toggle${S.bot ? ' active' : ''}`;
-        b.innerHTML = `<span class="bot-indicator"></span>BOT: ${S.bot ? 'ON' : 'OFF'}`;
+        b.className = `btn-bot${S.bot ? ' active' : ''}`;
+        b.innerText = S.bot ? 'BOT: ON' : 'BOT: OFF';
         UI.log(S.bot ? 'Bot ativado' : 'Bot pausado', S.bot ? 'success' : 'warn');
     },
-    fullscreen() {
-        document.fullscreenElement ? document.exitFullscreen() :
-            document.documentElement.requestFullscreen().catch(() => {});
-    },
-    init() {
+    init: () => {
         UI.log('Sistema inicializado', 'success');
-        UI.log('Conectando...', 'info');
-        setTimeout(() => this.requestNotificationPermission(), 3000);
+        UI.log('Conectando WebSocket...', 'info');
         WS.connect();
-        setInterval(async () => {
-            try {
-                const res = await fetch('/api/health');
-                const data = await res.json();
-                if (data.status !== 'ok') UI.log('Health check failed', 'warn');
-            } catch (e) {}
-        }, 60000);
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            console.log('[PWA] Rodando como app instalado');
-        }
     }
 };
 
-// 🚀 START
 window.addEventListener('load', Engine.init);
 document.addEventListener('keydown', e => {
     if (e.key === 'F9') { e.preventDefault(); Engine.restart(); }
-    if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
 });
