@@ -3,67 +3,146 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🎯 Trading MVP</title>
+  <title>🎯 Trading Pro Dashboard</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #0b0e11; color: #eaecef; text-align: center; padding: 20px; }
-    .card { background: #151a21; border: 1px solid #2b3139; border-radius: 12px; padding: 20px; margin: 20px auto; max-width: 400px; }
-    h1 { color: #f0b90b; margin: 0 0 10px; }
-    .price { font-size: 36px; font-weight: 800; color: #0ecb81; margin: 15px 0; font-family: monospace; }
-    button { padding: 12px 20px; font-size: 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; margin: 5px; transition: 0.2s; }
-    .btn-upd { background: #f0b90b; color: #000; }
-    .btn-tg  { background: #232830; color: #fff; border: 1px solid #f0b90b; }
-    .btn-upd:hover, .btn-tg:hover { filter: brightness(1.1); }
-    #status { margin-top: 15px; font-size: 13px; color: #848e9c; }
+    :root { --bg:#0b0e11; --card:#151a21; --brd:#2b3139; --txt:#eaecef; --mut:#848e9c; --pri:#f0b90b; --suc:#0ecb81; --dan:#f6465d; }
+    * { box-sizing:border-box; margin:0; padding:0; font-family: system-ui, sans-serif; }
+    body { background:var(--bg); color:var(--txt); padding:16px; min-height:100vh; }
+    .wrap { max-width:600px; margin:0 auto; }
+    .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .badge { background:var(--pri); color:#000; padding:4px 10px; border-radius:6px; font-weight:800; font-size:12px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+    .card { background:var(--card); border:1px solid var(--brd); border-radius:10px; padding:14px; }
+    .m-label { color:var(--mut); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+    .m-value { font-size:20px; font-weight:700; font-family: monospace; }
+    .signal-box { text-align:center; padding:16px; border-radius:10px; margin:12px 0; font-weight:800; font-size:18px; border:2px dashed var(--brd); transition:0.3s; }
+    .reasons { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:8px; }
+    .reason-tag { background:rgba(255,255,255,0.05); padding:3px 8px; border-radius:4px; font-size:10px; color:var(--mut); }
+    .risk-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; }
+    .risk-item { text-align:center; padding:8px; background:rgba(255,255,255,0.03); border-radius:6px; }
+    .risk-val { font-weight:700; font-family:monospace; font-size:14px; margin-top:4px; }
+    .sl { color:var(--dan); } .tp { color:var(--suc); } .tr { color:var(--pri); }
+    #log { background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; font-family:monospace; font-size:11px; color:var(--mut); margin-top:12px; max-height:80px; overflow-y:auto; }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    @media(max-width:480px) { .grid, .risk-grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>🎯 Trading MVP</h1>
-    <p>Teste rápido: Binance + Telegram</p>
-    <div class="price" id="price">--</div>
-    <button class="btn-upd" onclick="getPrice()">🔄 Atualizar Preço</button>
-    <hr style="border-color:#2b3139; margin:15px 0;">
-    <button class="btn-tg" onclick="sendAlert()">📢 Enviar Alerta Telegram</button>
-    <div id="status">Pronto.</div>
+<div class="wrap">
+  <div class="header">
+    <div style="font-weight:800; font-size:18px;">🎯 Trading <span style="color:var(--pri)">Pro</span></div>
+    <div class="badge" id="symBadge">BTCUSDT</div>
   </div>
 
-  <script>
-    let lastPrice = 0;
-    const elPrice = document.getElementById('price');
-    const elStatus = document.getElementById('status');
+  <div class="grid">
+    <div class="card">
+      <div class="m-label">💰 Preço Atual</div>
+      <div class="m-value" id="price">--.--</div>
+      <div style="font-size:12px; color:var(--mut);" id="change">--.--%</div>
+    </div>
+    <div class="card">
+      <div class="m-label">📊 Volatilidade (ATR%)</div>
+      <div class="m-value" id="vol">--.--%</div>
+      <div style="font-size:10px; color:var(--mut);">Ideal: 0.5% – 3.0%</div>
+    </div>
+  </div>
 
-    async function getPrice() {
-      elStatus.innerText = 'Buscando dados...';
-      try {
-        const res = await fetch('/api/price?symbol=BTCUSDT');
-        const data = await res.json();
-        lastPrice = parseFloat(data.price);
-        elPrice.innerText = `$ ${lastPrice.toFixed(2)}`;
-        elStatus.innerText = '✅ Conectado na Binance';
-      } catch (e) {
-        elPrice.innerText = 'Erro';
-        elStatus.innerText = '❌ Falha na conexão';
+  <div class="card signal-box" id="signalBox">
+    <div id="signalText">CARREGANDO...</div>
+    <div class="reasons" id="reasons"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="m-label">📐 RSI (14)</div>
+      <div class="m-value" id="rsi">--</div>
+    </div>
+    <div class="card">
+      <div class="m-label">📈 EMA 21</div>
+      <div class="m-value" id="ema">--</div>
+    </div>
+    <div class="card">
+      <div class="m-label">🔄 MACD</div>
+      <div class="m-value" id="macd">--</div>
+    </div>
+    <div class="card">
+      <div class="m-label">📏 ATR</div>
+      <div class="m-value" id="atr">--</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="m-label" style="color:var(--pri); margin-bottom:8px;">🛡️ Gestão de Risco (Baseado no ATR)</div>
+    <div class="risk-grid">
+      <div class="risk-item"><div class="m-label">🛑 Stop Loss</div><div class="risk-val sl" id="sl">--</div></div>
+      <div class="risk-item"><div class="m-label">🔄 Trailing</div><div class="risk-val tr" id="trail">--</div></div>
+      <div class="risk-item"><div class="m-label">✅ Take Profit</div><div class="risk-val tp" id="tp">--</div></div>
+    </div>
+  </div>
+
+  <div id="log">🔌 Inicializando...</div>
+</div>
+
+<script>
+  let lastSignal = null;
+  const log = (msg) => {
+    const el = document.getElementById('log');
+    const time = new Date().toLocaleTimeString('pt-BR');
+    el.innerHTML = `<span style="color:#848e9c">[${time}]</span> ${msg}<br>` + el.innerHTML;
+  };
+
+  async function fetchAnalysis() {
+    try {
+      const res = await fetch('/api/analysis?symbol=BTCUSDT');
+      const d = await res.json();
+      if(d.error) { log(`❌ ${d.error}`); return; }
+
+      document.getElementById('symBadge').innerText = d.symbol;
+      document.getElementById('price').innerText = `$ ${d.price.toFixed(2)}`;
+      const chEl = document.getElementById('change');
+      chEl.innerText = `${d.change >= 0 ? '+' : ''}${d.change.toFixed(2)}%`;
+      chEl.style.color = d.change >= 0 ? 'var(--suc)' : 'var(--dan)';
+
+      document.getElementById('vol').innerText = `${d.indicators.vol}%`;
+      document.getElementById('rsi').innerText = d.indicators.rsi;
+      document.getElementById('ema').innerText = `$${d.indicators.ema21}`;
+      document.getElementById('macd').innerText = d.indicators.macd.replace('_', ' ').toUpperCase();
+      document.getElementById('atr').innerText = d.indicators.atr;
+
+      const box = document.getElementById('signalBox');
+      const txt = document.getElementById('signalText');
+      const reasons = document.getElementById('reasons');
+      
+      txt.innerText = d.signal.type === 'WAIT' ? '⏳ AGUARDANDO CONFIRMAÇÃO...' : 
+                      d.signal.type === 'BUY' ? '🟢 SINAL DE COMPRA' : '🔴 SINAL DE VENDA';
+      box.style.borderColor = d.signal.color;
+      box.style.color = d.signal.color;
+      reasons.innerHTML = d.signal.reasons.map(r => `<span class="reason-tag">${r}</span>`).join('');
+
+      document.getElementById('sl').innerText = `$${d.risk.sl}`;
+      document.getElementById('trail').innerText = `$${d.risk.trail}`;
+      document.getElementById('tp').innerText = `$${d.risk.tp}`;
+
+      // 🔔 Alerta Telegram apenas quando o sinal muda
+      if (d.signal.type !== 'WAIT' && d.signal.type !== lastSignal) {
+        lastSignal = d.signal.type;
+        const msg = `🚨 <b>SINAL ${d.signal.type}</b>\n💰 ${d.symbol}: $${d.price}\n📊 ${d.signal.reasons.join(' • ')}\n⏱️ ${d.updated}`;
+        await fetch('/api/alert', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message: msg}) });
+        log(`📢 Alerta enviado: ${d.signal.type}`);
       }
-    }
 
-    async function sendAlert() {
-      if (!lastPrice) return alert('Atualize o preço primeiro!');
-      elStatus.innerText = 'Enviando para Telegram...';
-      try {
-        const res = await fetch('/api/alert', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: `🔔 ALERTA\n💰 BTCUSDT: $${lastPrice}\n⏱️ ${new Date().toLocaleTimeString()}` })
-        });
-        const json = await res.json();
-        elStatus.innerText = json.ok ? '✅ Telegram enviado!' : `❌ ${json.description || 'Erro'}`;
-      } catch (e) {
-        elStatus.innerText = '❌ Falha ao enviar';
-      }
+      log(`✅ Atualizado | ${d.signal.type} | RSI:${d.indicators.rsi}`);
+    } catch(e) {
+      log(`❌ Erro na conexão`);
     }
+  }
 
-    window.onload = getPrice;
-    setInterval(getPrice, 5000);
-  </script>
+  window.onload = () => {
+    log('🚀 Dashboard iniciado');
+    fetchAnalysis();
+    setInterval(fetchAnalysis, 15000); // Atualiza a cada 15s
+  };
+</script>
 </body>
 </html>
