@@ -64,8 +64,8 @@ app.get('/api/analysis', async (req, res) => {
   try {
     const symbol = req.query.symbol || 'BTCUSDT';
     const [tickerRes, klinesRes] = await Promise.all([
-      fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`),
-      fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=15m&limit=100`)
+      fetch(`https://binance.com/api/v3/ticker/24hr?symbol=${symbol}`),
+      fetch(`https://binance.com/api/v3/klines?symbol=${symbol}&interval=15m&limit=100`)
     ]);
     const ticker = await tickerRes.json();
     const klines = await klinesRes.json();
